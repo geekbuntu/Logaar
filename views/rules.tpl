@@ -90,17 +90,11 @@ div#multisel div#selected p:hover {
         </tr>
     </thead>
     <tbody>
-        % for r in rules:
-        <tr id="{{r['_id']}}">
-            % for k in keys:
-            <td>{{r[k]}}</td>
-            % end
-        </tr>
-        % end
+
     </tbody>
 </table>
 
-<p><img src="static/new.png" rel="#editing_form" class="new"> New host</p>
+<p><img src="static/new.png" rel="#editing_form" class="new"> New rule</p>
 
 <!-- Item editing or creation form -->
 <div id="editing_form">
@@ -162,8 +156,14 @@ div#multisel div#selected p:hover {
 <script>
 $(function() {
 
-	$('table#items').dataTable(
-    );
+	$('table#items').dataTable( {
+		"bProcessing": true,
+		"bServerSide": true,
+		"sAjaxSource": "drules"
+
+	} );
+
+
 
     /*
     $("table#items tr td img[title]").tooltip({

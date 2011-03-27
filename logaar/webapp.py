@@ -199,6 +199,79 @@ def rules():
     )
     return dict(rules=rules, keys=keys)
 
+#Type	Name	Info
+#int	iDisplayStart	Display start point
+#int	iDisplayLength	Number of records to display
+#int	iColumns	Number of columns being displayed (useful for getting individual column search info)
+#string	sSearch	Global search field
+#boolean	bEscapeRegex	Global search is regex or not
+#boolean	bSortable_(int)	Indicator for if a column is flagged as sortable or not on the client-side
+#boolean	bSearchable_(int)	Indicator for if a column is flagged as searchable or not on the client-side
+#string	sSearch_(int)	Individual column filter
+#boolean	bEscapeRegex_(int)	Individual column filter is regex or not
+#int	iSortingCols	Number of columns to sort on
+#int	iSortCol_(int)	Column being sorted on (you will need to decode this number for your database)
+#string	sSortDir_(int)	Direction to be sorted - "desc" or "asc". Note that the prefix for this variable is wrong in 1.5.x where iSortDir_(int) was used)
+#string	sEcho	Information for DataTables to use for rendering
+
+def rg(name, default=None, caster=str):
+    """Get a parameter from the GET request"""
+    if name in request.GET:
+        return caster(request.GET[name])
+    return default
+
+import json
+from pymongo import json_util
+#from json import JSONEncoder
+#from pymongo.objectid import ObjectId
+#
+#class MongoEncoder(JSONEncoder):
+#    def _iterencode(self, o, markers=None):
+#        if isinstance(o, ObjectId):
+#            return """ObjectId("%s")""" % str(o)
+#        else:
+#            return JSONEncoder._iterencode(self, o, markers)
+
+rules_cols =  (
+    'id',
+    'program' ,
+    'son' ,
+    'author' ,
+    'modify_date' ,
+    'score',
+    'revision' ,
+    'rule' ,
+    'level' ,
+    'host' ,
+    'rule_type' ,
+    'event_type'
+)
+
+from pymongo import ASCENDING,  DESCENDING
+
+@bottle.get('/drules')
+def drules():
+
+    log.info(repr(request.GET))
+    skip = rg('iDisplayStart', caster=int, default=10)
+    sort_on = rg('iSortCol_0', caster=int, default=0)
+    sort_on = rules_cols[sort_on]
+    sort_dir = rg('sSortDir_0', default='desc')
+    sort_dir = DESCENDING if sort_dir == 'desc' else ASCENDING
+    print sort_on, sort_dir
+    lim = rg('iDisplayLength', caster=int, default=10)
+    sEcho = rg('sEcho', caster=int)
+
+    ru = db.rules.find(limit=lim, skip=skip).sort(sort_on, sort_dir)
+
+    d = {
+        'iTotalRecords': db.rules.count(),
+        'iTotalDisplayRecords': ru.count(),
+        'sEcho': sEcho,
+        'aaData': [[r[k] for k in rules_cols] for r in ru]
+    }
+#    return json.dumps(d, cls=MongoEncoder)
+    return json.dumps(d, default=json_util.default)
 
 
 # serving static files
