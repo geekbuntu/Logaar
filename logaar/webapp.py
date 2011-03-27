@@ -249,6 +249,8 @@ rules_cols =  (
 
 from pymongo import ASCENDING,  DESCENDING
 
+import re
+
 @bottle.get('/drules')
 def drules():
 
@@ -258,11 +260,17 @@ def drules():
     sort_on = rules_cols[sort_on]
     sort_dir = rg('sSortDir_0', default='desc')
     sort_dir = DESCENDING if sort_dir == 'desc' else ASCENDING
+    free_search = rg('sSearch', default='a')
     print sort_on, sort_dir
     lim = rg('iDisplayLength', caster=int, default=10)
     sEcho = rg('sEcho', caster=int)
 
-    ru = db.rules.find(limit=lim, skip=skip).sort(sort_on, sort_dir)
+    if free_search:
+        print 'using', free_search
+        regexp = re.compile(free_search, re.IGNORECASE)
+        ru = db.rules.find({'rule': regexp }, limit=lim, skip=skip).sort(sort_on, sort_dir)
+    else:
+        ru = db.rules.find(limit=lim, skip=skip).sort(sort_on, sort_dir)
 
     d = {
         'iTotalRecords': db.rules.count(),
