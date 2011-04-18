@@ -1,3 +1,6 @@
+#
+# Logaar - log injector
+#
 # Copyright (C) 2011 Federico Ceratto
 #
 # This program is free software: you can redistribute it and/or modify
