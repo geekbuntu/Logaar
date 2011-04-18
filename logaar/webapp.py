@@ -1,8 +1,26 @@
+#!/usr/bin/env python
+
+# Copyright (C) 2011 Federico Ceratto
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from beaker.middleware import SessionMiddleware
 import bottle
 from bottle import abort, route, static_file, run, view, request
 from bottle import debug as bottle_debug
+from bottle import HTTPResponse, HTTPError
+
 from collections import defaultdict
 from datetime import datetime
 from pymongo import Connection
@@ -16,9 +34,12 @@ from dbconnector import DB
 #from flmap import draw_png_map, draw_svg_map
 #from flutils import flag, extract_all, get_rss_channels
 
+import json
+from pymongo import json_util
+import re
+
 from argparse import ArgumentParser
 
-from bottle import HTTPResponse, HTTPError
 
 import logging
 logging.debug('starting')
@@ -76,7 +97,11 @@ def pcheckbox(name):
         return '1'
     return '0'
 
-
+def rg(name, default=None, caster=str):
+    """Get a parameter from the GET request"""
+    if name in request.GET:
+        return caster(request.GET[name])
+    return default
 
 # # #  web services  # # #
 
@@ -133,6 +158,7 @@ def logout():
     s.delete()
     bottle.redirect('')
 
+# end of authentication
 
 @bottle.route('/')
 @view('index')
@@ -157,25 +183,84 @@ def index():
 #   - edit: updates an element if rid is not null, otherwise creates
 #             a new one
 
+
 @bottle.route('/logs')
 @view('logs')
 def logs():
     _require()
-    logs = db.logs.find()
-    try:
-        print logs.count()
-        return dict(logs=logs)
-    except Exception, e:
-        print e
-        return {}
+    keys = ('date', 'level', 'program', 'pid', 'message', 'score', 'tags')
+    return dict(keys=keys, callback='dlogs')
+
+@bottle.get('/dlogs')
+def dlogs():
+    """Serve dynamic logs table"""
+    keys = ('date', 'level', 'program', 'pid', 'msg', 'score', 'tags')
+    coll = db.logs
+
+
+
+    skip = rg('iDisplayStart', caster=int, default=10)
+    sort_on = rg('iSortCol_0', caster=int, default=0)
+    sort_on = keys[sort_on]
+    sort_dir = rg('sSortDir_0', default='desc')
+    sort_dir = DESCENDING if sort_dir == 'desc' else ASCENDING
+    free_search = rg('sSearch', default='a')
+    lim = rg('iDisplayLength', caster=int, default=10)
+    sEcho = rg('sEcho', caster=int)
+
+#    def search(self, coll, skip=0, sort_on=None, sort_dir='desc', free_search=None, limit=10, keys=None):
+
+
+    if free_search:
+        regexp = re.compile(free_search, re.IGNORECASE)
+        ru = coll.find({'rule': regexp }, limit=lim, skip=skip).sort(sort_on, sort_dir)
+    else:
+        ru = coll.find(limit=lim, skip=skip).sort(sort_on, sort_dir)
+
+    d = {
+        'iTotalRecords': coll.count(),
+        'iTotalDisplayRecords': ru.count(),
+        'sEcho': sEcho,
+        'aaData': [[r.get(k) for k in keys] for r in ru]
+    }
+    return json.dumps(d, default=json_util.default)
 
 
 @bottle.route('/incoming')
-@view('incoming')
+@view('logs')
 def incoming():
     _require()
-    logs = db.incoming.find()
-    return dict(logs=logs)
+    keys = ('date', 'message')
+    return dict(keys=keys, callback='dincoming')
+
+@bottle.get('/dincoming')
+def dincoming():
+    """Serve dynamic logs table"""
+    keys = ('date', 'msg')
+    coll = db.incoming
+
+    skip = rg('iDisplayStart', caster=int, default=10)
+    sort_on = rg('iSortCol_0', caster=int, default=0)
+    sort_on = keys[sort_on]
+    sort_dir = rg('sSortDir_0', default='desc')
+    sort_dir = DESCENDING if sort_dir == 'desc' else ASCENDING
+    free_search = rg('sSearch', default='a')
+    lim = rg('iDisplayLength', caster=int, default=10)
+    sEcho = rg('sEcho', caster=int)
+
+    if free_search:
+        regexp = re.compile(free_search, re.IGNORECASE)
+        ru = coll.find({'rule': regexp }, limit=lim, skip=skip).sort(sort_on, sort_dir)
+    else:
+        ru = coll.find(limit=lim, skip=skip).sort(sort_on, sort_dir)
+
+    d = {
+        'iTotalRecords': coll.count(),
+        'iTotalDisplayRecords': ru.count(),
+        'sEcho': sEcho,
+        'aaData': [[str(r.get(k)) for k in keys] for r in ru]
+    }
+    return json.dumps(d, default=json_util.default)
 
 
 @bottle.route('/rules')
@@ -199,29 +284,26 @@ def rules():
     )
     return dict(rules=rules, keys=keys)
 
-#Type	Name	Info
-#int	iDisplayStart	Display start point
-#int	iDisplayLength	Number of records to display
-#int	iColumns	Number of columns being displayed (useful for getting individual column search info)
-#string	sSearch	Global search field
-#boolean	bEscapeRegex	Global search is regex or not
-#boolean	bSortable_(int)	Indicator for if a column is flagged as sortable or not on the client-side
-#boolean	bSearchable_(int)	Indicator for if a column is flagged as searchable or not on the client-side
-#string	sSearch_(int)	Individual column filter
-#boolean	bEscapeRegex_(int)	Individual column filter is regex or not
-#int	iSortingCols	Number of columns to sort on
-#int	iSortCol_(int)	Column being sorted on (you will need to decode this number for your database)
-#string	sSortDir_(int)	Direction to be sorted - "desc" or "asc". Note that the prefix for this variable is wrong in 1.5.x where iSortDir_(int) was used)
-#string	sEcho	Information for DataTables to use for rendering
+#Type   Name    Info
+#int    iDisplayStart   Display start point
+#int    iDisplayLength  Number of records to display
+#int    iColumns    Number of columns being displayed (useful for getting individual column search info)
+#string sSearch Global search field
+#boolean    bEscapeRegex    Global search is regex or not
+#boolean    bSortable_(int) Indicator for if a column is flagged as sortable or not on the client-side
+#boolean    bSearchable_(int)   Indicator for if a column is flagged as searchable or not on the client-side
+#string sSearch_(int)   Individual column filter
+#boolean    bEscapeRegex_(int)  Individual column filter is regex or not
+#int    iSortingCols    Number of columns to sort on
+#int    iSortCol_(int)  Column being sorted on (you will need to decode this number for your database)
+#string sSortDir_(int)  Direction to be sorted - "desc" or "asc". Note that the prefix for this variable is wrong in 1.5.x where iSortDir_(int) was used)
+#string sEcho   Information for DataTables to use for rendering
 
-def rg(name, default=None, caster=str):
-    """Get a parameter from the GET request"""
-    if name in request.GET:
-        return caster(request.GET[name])
-    return default
 
-import json
-from pymongo import json_util
+
+
+
+
 #from json import JSONEncoder
 #from pymongo.objectid import ObjectId
 #
@@ -247,44 +329,132 @@ rules_cols =  (
     'event_type'
 )
 
-from pymongo import ASCENDING,  DESCENDING
 
-import re
 
 @bottle.get('/drules')
 def drules():
 
-    log.info(repr(request.GET))
     skip = rg('iDisplayStart', caster=int, default=10)
     sort_on = rg('iSortCol_0', caster=int, default=0)
     sort_on = rules_cols[sort_on]
     sort_dir = rg('sSortDir_0', default='desc')
-    sort_dir = DESCENDING if sort_dir == 'desc' else ASCENDING
-    free_search = rg('sSearch', default='a')
-    print sort_on, sort_dir
-    lim = rg('iDisplayLength', caster=int, default=10)
+    free_search = rg('sSearch', default=None)
+    limit = rg('iDisplayLength', caster=int, default=10)
     sEcho = rg('sEcho', caster=int)
 
-    if free_search:
-        print 'using', free_search
-        regexp = re.compile(free_search, re.IGNORECASE)
-        ru = db.rules.find({'rule': regexp }, limit=lim, skip=skip).sort(sort_on, sort_dir)
-    else:
-        ru = db.rules.find(limit=lim, skip=skip).sort(sort_on, sort_dir)
+    aaData, displayed,  total = db.search(
+        db.rules,
+        skip=skip,
+        sort_on=sort_on,
+        sort_dir=sort_dir,
+        free_search=free_search,
+        limit=limit,
+        keys=rules_cols
+    )
 
     d = {
-        'iTotalRecords': db.rules.count(),
-        'iTotalDisplayRecords': ru.count(),
+        'iTotalRecords': total,
+        'iTotalDisplayRecords': displayed,
         'sEcho': sEcho,
-        'aaData': [[r[k] for k in rules_cols] for r in ru]
+        'aaData': aaData
     }
-#    return json.dumps(d, cls=MongoEncoder)
     return json.dumps(d, default=json_util.default)
+
+
+@bottle.route('/rules')
+@view('rules')
+def rules():
+    _require()
+    rules = db.rules.find()
+    keys =  (
+        'id',
+        'program' ,
+        'son' ,
+        'author' ,
+        'modify_date' ,
+        'score',
+        'revision' ,
+        'rule' ,
+        'level' ,
+        'host' ,
+        'rule_type' ,
+        'event_type'
+    )
+    return dict(rules=rules, keys=keys)
+
+class SparseDict(dict):
+    def __missing__(self, key):
+        return 0
+
+def top_talkers():
+    """Generate a sorted list of most chatty programs"""
+    s = SparseDict()
+    for log in db.logs.find():
+        #FIXME: host not working
+        s[log['program']] += 1
+    toplist = [(s[k], k) for k in s]
+    toplist = sorted(toplist, reverse=True)[:10]
+    d = bdict(
+        toplist = toplist
+    )
+    return d
+
+def top_programs():
+    """Generate a sorted list of most chatty programs"""
+    s = SparseDict()
+    for log in db.logs.find():
+        s[log['program']] += 1
+    toplist = [(s[k], k) for k in s]
+    toplist = sorted(toplist, reverse=True)[:10]
+    d = bdict(
+        toplist = toplist
+    )
+    return d
+
+from random import randint
+
+def traffic_stats():
+    li = [(x, randint(0, 100)) for x in xrange(60)]
+    ymin, ymax = zip(*li)
+    ymin = min(ymin)
+    ymax = max(ymax)
+
+    d = bdict(
+        series = li,
+        ymin=ymin,
+        ymax=ymax,
+        xmin=0,
+        xmax=3,
+   )
+    return d
+
+
+class bdict(dict):
+    """Trivial dict that maps values to attributes"""
+    def __getattr__(self, item):
+        return self.__getitem__(item)
+#        try:
+#            return self.__getitem__(item)
+#        except KeyError:
+#            raise AttributeError(item)
+
+@bottle.route('/stats')
+@view('stats')
+def stats():
+    _require()
+    d = bdict(
+        top_talkers = top_talkers(),
+        top_programs = top_programs(),
+        traffic = traffic_stats()
+    )
+#    print '-----------------'
+#    print repr(db.stats(db.logs))
+    return d
 
 
 # serving static files
 
-@bottle.route('/static/:filename#[a-zA-Z0-9_\.?\/?]+#')
+@bottle.route('/static/:filename#[-a-zA-Z0-9_\.?\/?]+#')
 def static(filename):
     _require()
     bottle.response.headers['Cache-Control'] = 'max-age=3600, public'
@@ -332,7 +502,11 @@ def main():
         conf.data_dir = args.repodir
 
     # Setting up DB connectivity
-    db = DB()
+    try:
+        db = DB()
+    except Exception, e:
+        log.error("Unable to setup connection to the database: %s" % e)
+        exit(1)
     #TODO DB(host=...)
 
     # logging
