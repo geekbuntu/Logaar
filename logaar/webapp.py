@@ -23,7 +23,6 @@ from bottle import HTTPResponse, HTTPError
 
 from collections import defaultdict
 from datetime import datetime
-from pymongo import Connection
 from sys import exit
 from time import time, sleep, localtime
 
@@ -447,8 +446,6 @@ def stats():
         top_programs = top_programs(),
         traffic = traffic_stats()
     )
-#    print '-----------------'
-#    print repr(db.stats(db.logs))
     return d
 
 
