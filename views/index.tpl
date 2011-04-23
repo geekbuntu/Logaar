@@ -36,7 +36,7 @@ input:hover { background: #fefefe}
 
 <script src="static/jquery.tools.min.js" type="text/javascript"></script>
 <script src="static/jquery.dataTables.js" type="text/javascript"></script>
-
+<script src="static/jquery.mousewheel.min.js" type="text/javascript"></script>
 
 <style media="screen" type="text/css">
 

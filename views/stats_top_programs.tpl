@@ -1,18 +1,3 @@
-<script src="static/jquery.tools.min.js" type="text/javascript"></script>
-
-<img id="help" src="static/help.png" rel="div#help_ovr" title="Help">
-<div id="help_ovr">
-    <h4>Contextual help: Manage</h4>
-    <p>TODO</p>
-    <p>Here some nice Lorem ipsum:</p>
-    <p>Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p>
-    <br/>
-    <p>Press ESC to close this window</p>
-</div>
-
-
-
-<!-- traffic chart-->
 
 
 <style>
@@ -97,32 +82,32 @@
         border: 1px solid #8888cc;
     }
 
-    div.spinner {
-        margin: 7em auto;
-        background: url('static/spinner_big.gif') no-repeat;
-        width: 32px;
-        height: 32px;
-    }
-
 </style>
 
-<div id="stats_traffic">
-    <div class="spinner"></div>
-</div>
-<div id="stats_top_talkers">
-    <div class="spinner"></div>
-</div>
-<div id="stats_top_programs">
-    <div class="spinner"></div>
-</div>
 
+<h3>Top programs</h3>
+<table id="top_programs">
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Name</th>
+        </tr>
+    </thead>
 
-
-<script type="text/javascript">
-$(function() {
-    $('div#stats_traffic').load('stats_traffic');
-    $('div#stats_top_programs').load('stats_top_programs');
-    $('div#stats_top_talkers').load('stats_top_talkers');
-
-});
-</script>
+% mi = delta = 0
+% if top_programs:
+%   mi = min(x[0] for x in top_programs)
+%   delta = max(x[0] for x in top_programs) - mi
+% if delta:
+%     delta = 300.0 / delta
+% for n, name in top_programs:
+    <tr>
+        <td>{{name}}</td>
+        <td>
+            <div class="hbar" style="width: {{(n - mi) * delta}}px">
+                {{n}}
+            </div>
+        </td>
+    </tr>
+% end
+</table>

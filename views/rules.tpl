@@ -87,13 +87,23 @@
 <script>
 $(function() {
 
-    $('table#items').dataTable( {
+    table_items = $('table#items').dataTable( {
         "bProcessing": true,
         "bServerSide": true,
         "sAjaxSource": "drules",
+        "sPaginationType": "full_numbers",
         "sDom": '<"top"lfp>rt<"bottom"i><"clear">',
-
     } );
+
+    $('table#items').mousewheel(function(event, delta) {
+        if (delta > 0) {
+            table_items.fnPageChange( 'previous' );
+        } else {
+            table_items.fnPageChange( 'next' );
+        }
+        return false;
+    });
+
 
 
 

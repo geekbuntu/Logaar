@@ -25,10 +25,13 @@ from bottle import HTTPResponse, HTTPError
 
 from collections import defaultdict
 from datetime import datetime
+from pymongo import has_c, ASCENDING, DESCENDING #TODO: remove this
 from sys import exit
 from time import time, sleep, localtime
 
+from collector import Collector
 from confreader import ConfReader
+from parser import Parser
 #import mailer
 from core import Alert, Users, clean
 from dbconnector import DB
@@ -46,7 +49,10 @@ import logging
 logging.debug('starting')
 log = logging.getLogger(__name__)
 
-db = None
+
+db = None   # global db connection
+threads = {} # non-webapp threads
+
 
 def say(s, level=None):
         print s
@@ -195,34 +201,32 @@ def logs():
 @bottle.get('/dlogs')
 def dlogs():
     """Serve dynamic logs table"""
-    keys = ('date', 'level', 'program', 'pid', 'msg', 'score', 'tags')
-    coll = db.logs
-
-
+    logs_cols = ('date', 'level', 'program', 'pid', 'msg', 'score', 'tags')
 
     skip = rg('iDisplayStart', caster=int, default=10)
     sort_on = rg('iSortCol_0', caster=int, default=0)
-    sort_on = keys[sort_on]
+    sort_on = logs_cols[sort_on]
     sort_dir = rg('sSortDir_0', default='desc')
-    sort_dir = DESCENDING if sort_dir == 'desc' else ASCENDING
     free_search = rg('sSearch', default='a')
-    lim = rg('iDisplayLength', caster=int, default=10)
+    limit = rg('iDisplayLength', caster=int, default=10)
     sEcho = rg('sEcho', caster=int)
 
-#    def search(self, coll, skip=0, sort_on=None, sort_dir='desc', free_search=None, limit=10, keys=None):
-
-
-    if free_search:
-        regexp = re.compile(free_search, re.IGNORECASE)
-        ru = coll.find({'rule': regexp }, limit=lim, skip=skip).sort(sort_on, sort_dir)
-    else:
-        ru = coll.find(limit=lim, skip=skip).sort(sort_on, sort_dir)
+    aaData, displayed,  total = db.search(
+        db.logs,
+        skip=skip,
+        sort_on=sort_on,
+        sort_dir=sort_dir,
+        free_search=free_search,
+        limit=limit,
+        keys=logs_cols,
+        search_key='msg',
+    )
 
     d = {
-        'iTotalRecords': coll.count(),
-        'iTotalDisplayRecords': ru.count(),
+        'iTotalRecords': total,
+        'iTotalDisplayRecords': displayed,
         'sEcho': sEcho,
-        'aaData': [[r.get(k) for k in keys] for r in ru]
+        'aaData': aaData
     }
     return json.dumps(d, default=json_util.default)
 
@@ -251,15 +255,17 @@ def dincoming():
 
     if free_search:
         regexp = re.compile(free_search, re.IGNORECASE)
-        ru = coll.find({'rule': regexp }, limit=lim, skip=skip).sort(sort_on, sort_dir)
+        ru = coll.find({'rule': regexp, 'processed': None}, limit=lim, skip=skip).sort(sort_on, sort_dir)
     else:
-        ru = coll.find(limit=lim, skip=skip).sort(sort_on, sort_dir)
+        ru = coll.find({'processed': None}, limit=lim, skip=skip).sort(sort_on, sort_dir)
 
+    aaData =  [[str(r.get(k, '')) for k in keys] for r in ru]
+    print repr(aaData)
     d = {
         'iTotalRecords': coll.count(),
         'iTotalDisplayRecords': ru.count(),
         'sEcho': sEcho,
-        'aaData': [[str(r.get(k)) for k in keys] for r in ru]
+        'aaData': aaData
     }
     return json.dumps(d, default=json_util.default)
 
@@ -330,8 +336,6 @@ rules_cols =  (
     'event_type'
 )
 
-
-
 @bottle.get('/drules')
 def drules():
 
@@ -387,68 +391,84 @@ class SparseDict(dict):
     def __missing__(self, key):
         return 0
 
+@bottle.route('/stats_top_talkers')
+@view('stats_top_talkers')
 def top_talkers():
-    """Generate a sorted list of most chatty programs"""
-    s = SparseDict()
-    for log in db.logs.find():
-        #FIXME: host not working
-        s[log['program']] += 1
-    toplist = [(s[k], k) for k in s]
-    toplist = sorted(toplist, reverse=True)[:10]
-    d = bdict(
-        toplist = toplist
-    )
-    return d
+    """Generate a sorted list of most chatty hosts"""
+    #FIXME: use hosts, not program
+    s = db.logs.group({'program': 1},None, {'count': 0},'function(obj,out) { out.count++; }')
+    toplist = ((p['count'], p['program']) for p in s)
+    return {'top_talkers': sorted(toplist, reverse=True)[:10]}
 
+@bottle.route('/stats_top_programs')
+@view('stats_top_programs')
 def top_programs():
     """Generate a sorted list of most chatty programs"""
-    s = SparseDict()
-    for log in db.logs.find():
-        s[log['program']] += 1
-    toplist = [(s[k], k) for k in s]
-    toplist = sorted(toplist, reverse=True)[:10]
-    d = bdict(
-        toplist = toplist
+    s = db.logs.group({'program': 1},None, {'count': 0},'function(obj,out) { out.count++; }')
+    toplist = ((p['count'], p['program']) for p in s)
+    return {'top_programs': sorted(toplist, reverse=True)[:10]}
+
+@bottle.route('/stats_traffic')
+@view('stats_traffic')
+def stats_traffic():
+
+    s = db.logs.map_reduce(
+        """
+        var created_at_minute =
+            this.date.substring(0,15);
+        emit(created_at_minute, {count: 1});""",
+
+        """
+        function(key, values) {
+                 var total = 0;
+                 for(var i = 0; i < values.length; i++) { total += values[i].count; }
+                 return {key: key, count: total};
+        }""",
+        "traffic_stat",
     )
-    return d
 
-from random import randint
-
-def traffic_stats():
-    li = [(x, randint(0, 100)) for x in xrange(60)]
-    ymin, ymax = zip(*li)
-    ymin = min(ymin)
-    ymax = max(ymax)
+    traffic = tuple(i['value']['count'] for i in s.find())
+    traffic = traffic[-60:]
 
     d = bdict(
-        series = li,
-        ymin=ymin,
-        ymax=ymax,
+        series = enumerate(traffic),
+        ymin=min(traffic),
+        ymax=max(traffic),
         xmin=0,
         xmax=3,
    )
-    return d
+    return {'traffic': d}
+
+
+@bottle.route('/stats')
+@view('stats')
+def stats():
+    return {}
+
+@bottle.route('/manage')
+@view('manage')
+def manage():
+    global threads
+    return dict(
+        collector = threads['collector'].stats,
+        parser = threads['parser'].stats
+    )
+
+@bottle.route('/shutdown')
+def shutdown():
+    global threads
+    log.info("Shutting down threads.")
+    for t in threads.itervalues():
+        t.stop()
+    log.info("Exiting.")
+    exit(1)
+
 
 
 class bdict(dict):
     """Trivial dict that maps values to attributes"""
     def __getattr__(self, item):
         return self.__getitem__(item)
-#        try:
-#            return self.__getitem__(item)
-#        except KeyError:
-#            raise AttributeError(item)
-
-@bottle.route('/stats')
-@view('stats')
-def stats():
-    _require()
-    d = bdict(
-        top_talkers = top_talkers(),
-        top_programs = top_programs(),
-        traffic = traffic_stats()
-    )
-    return d
 
 
 # serving static files
@@ -460,11 +480,17 @@ def static(filename):
     if filename == '/jquery-ui.js':
         return static_file('jquery-ui/jquery-ui.js',
             '/usr/share/javascript/') #TODO: support other distros
+
     elif filename == 'jquery.min.js':
         return static_file('jquery/jquery.min.js', '/usr/share/javascript/')
+
     elif filename == 'jquery-ui.custom.css': #TODO: support version change
         return static_file('jquery-ui/css/smoothness/jquery-ui-1.7.2.custom.css',
             '/usr/share/javascript/')
+
+    elif filename == 'jquery.mousewheel.min.js':
+        return static_file(filename, '/usr/share/javascript/jquery-mousewheel/')
+
     else:
         return static_file(filename, 'static')
 
@@ -482,6 +508,7 @@ def favicon():
 def main():
     global conf
     global db
+    global threads
 
     parser = ArgumentParser(description='Logaar daemon')
     parser.add_argument('-d', '--debug', action='store_true', help='debug mode')
@@ -507,6 +534,19 @@ def main():
         log.error("Unable to setup connection to the database: %s" % e)
         exit(1)
     #TODO DB(host=...)
+
+    from os import getpid
+    def debug(s):
+        print 'webapp', getpid(), s
+
+    # Start non-webapp threads
+    debug("starting parser...")
+    threads['parser'] = Parser(conf)
+    threads['parser'].start()
+
+    debug("starting collector...")
+    threads['collector'] = Collector(conf)
+    threads['collector'].start()
 
     # logging
 
@@ -542,7 +582,12 @@ def main():
 
     run(app=app, host=conf.listen_address, port=conf.listen_port, reloader=reload)
 
+    log.info("Shutting down threads.")
 
+    for t in threads.itervalues():
+        t.stop()
+
+    log.info("Exiting.")
 
 
 

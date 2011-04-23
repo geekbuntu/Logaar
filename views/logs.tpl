@@ -27,13 +27,24 @@
 <script>
 $(function() {
 
-    $('table#items').dataTable( {
+    table_items = $('table#items').dataTable( {
         "bProcessing": true,
         "bServerSide": true,
+        "sPaginationType": "full_numbers",
         "sAjaxSource": "{{callback}}",
         "sDom": '<"top"lfp>rt<"bottom"i><"clear">',
-
     } );
+
+
+    $('table#items').mousewheel(function(event, delta) {
+        if (delta > 0) {
+            table_items.fnPageChange( 'previous' );
+        } else {
+            table_items.fnPageChange( 'next' );
+        }
+        return false;
+    });
+
 
     $("table#items tr td img[title]").tooltip({
         tip: '.tooltip',

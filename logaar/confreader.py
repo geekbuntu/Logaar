@@ -21,6 +21,10 @@ class ConfReader(object):
             'title': 'Logaar',
             'listen_address': 'localhost',
             'listen_port': 8088,
+            'syslog_address': '0.0.0.0',
+            'syslog_udp_port': 5514,
+            'syslog_tcp_port': 5514,
+            'db_host': 'localhost',
             'logfile': 'logaar.log',
             'data_dir': '/var/lib/logaar',
             'demo_mode': False,
@@ -29,8 +33,6 @@ class ConfReader(object):
             'email_dests': 'root@localhost',
             'public_url': None
         }
-        #TODO: validate strings from the .ini file  ---> fmt = "-ofmt:%" +
-            # conf.ip_list_netflow_address
         self.__slots__ = defaults.keys()
         config = SafeConfigParser(defaults)
         config.read(fn)
@@ -42,3 +44,10 @@ class ConfReader(object):
                 self.__dict__[name] = config.getfloat('global', name)
             else:
                 self.__dict__[name] = config.get('global', name)
+
+    def __repr__(self):
+        return self.__dict__.__repr__()
+
+if __name__ == '__main__':
+    conf = ConfReader(fn='logaar.ini')
+    print repr(conf)

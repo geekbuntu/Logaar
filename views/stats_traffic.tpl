@@ -1,18 +1,3 @@
-<script src="static/jquery.tools.min.js" type="text/javascript"></script>
-
-<img id="help" src="static/help.png" rel="div#help_ovr" title="Help">
-<div id="help_ovr">
-    <h4>Contextual help: Manage</h4>
-    <p>TODO</p>
-    <p>Here some nice Lorem ipsum:</p>
-    <p>Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p>
-    <br/>
-    <p>Press ESC to close this window</p>
-</div>
-
-
-
-<!-- traffic chart-->
 
 
 <style>
@@ -97,32 +82,21 @@
         border: 1px solid #8888cc;
     }
 
-    div.spinner {
-        margin: 7em auto;
-        background: url('static/spinner_big.gif') no-repeat;
-        width: 32px;
-        height: 32px;
-    }
-
 </style>
 
-<div id="stats_traffic">
-    <div class="spinner"></div>
+
+
+<div style="width: 378px; height: 220px;" id="vertgraph">
+    <div id="title">Traffic</div>
+    <div id="ylabel" style="top: 27px;">{{traffic.ymax}}</div>
+    <div id="ylabel" style="top: 172px;">{{traffic.ymin}}</div>
+    <ul>
+        % for dt, value in traffic.series:
+        <li style="left: {{dt*6}}px; height: {{value*1}}px;"><span>{{value}}</span></li>
+        % end
+    </ul>
+
 </div>
-<div id="stats_top_talkers">
-    <div class="spinner"></div>
-</div>
-<div id="stats_top_programs">
-    <div class="spinner"></div>
-</div>
 
 
 
-<script type="text/javascript">
-$(function() {
-    $('div#stats_traffic').load('stats_traffic');
-    $('div#stats_top_programs').load('stats_top_programs');
-    $('div#stats_top_talkers').load('stats_top_talkers');
-
-});
-</script>

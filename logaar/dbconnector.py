@@ -36,10 +36,31 @@ class DB(object):
             log.info("Creating collection 'logs'")
         self.logs = db.logs
 
+        # Create index if needed
+        db.logs.ensure_index(
+            [
+                ('date', 1),
+                ('level', 1),
+                ('message', 1),
+                ('program', 1),
+                ('pid', 1),
+            ],
+            unique = True,
+            dropDups = True,
+        )
+
+
         if 'incoming' not in db.collection_names():
             log.info("Creating collection 'incoming'")
             db.create_collection("incoming", capped=True,size="100000")
         self.incoming = db.incoming
+
+        # Create index if needed
+        db.incoming.ensure_index(
+            [
+                ("date", DESCENDING)
+            ]
+        )
 
         if 'rules' not in db.collection_names():
             log.info("Creating collection 'rules'")
@@ -53,7 +74,7 @@ class DB(object):
     #TODO: run c.disconnect() on DB.__del__() ?
 
 
-    def search(self, coll, skip=0, sort_on=None, sort_dir='desc', free_search=None, limit=10, keys=None):
+    def search(self, coll, skip=0, sort_on=None, sort_dir='desc', free_search=None, limit=10, keys=None, search_key='rule'):
         """Search, sort and filter items"""
 
         sort_dir = DESCENDING if sort_dir == 'desc' else ASCENDING
@@ -61,7 +82,7 @@ class DB(object):
         #TODO: rexep caching
         if free_search:
             regexp = re.compile(free_search, re.IGNORECASE)
-            ru = coll.find({'rule': regexp }, limit=limit, skip=skip).sort(sort_on, sort_dir)
+            ru = coll.find({search_key: regexp }, limit=limit, skip=skip).sort(sort_on, sort_dir)
         else:
             ru = coll.find(limit=limit, skip=skip).sort(sort_on, sort_dir)
 
