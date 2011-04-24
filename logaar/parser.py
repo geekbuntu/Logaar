@@ -17,100 +17,79 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from datetime import datetime
-from multiprocessing import Process, Manager
-from os import getpid
 from sys import exit
 from time import time, sleep
 import re
 
 #from core import Alert, Users, clean
 from dbconnector import DB
+from utils import debug, ProcessWrapper
 
 import logging
 logging.debug('starting')
 log = logging.getLogger(__name__)
 
-def debug(s):
-    print __name__, getpid(), s
 
+class Parser(ProcessWrapper):
+    """Log parser process"""
 
-def parser(conf, stats):
-    debug('started')
-    db = DB(host=conf.db_host)
-    while stats['_enabled']:
-        sleep(.05)
-        for msg in db.incoming.find({'processed': None}, tailable=True):
-            try:
-                db.incoming.update(msg,  {'processed': 1}, safe=True, multi=False)
-                stats['processed'] += 1
-                li = msg['msg'].split()
-                host = li[3]
-                program = li[4]
-                text = ' '.join(li[5:])
-                if program.endswith(']:') and '[' in program:
-                    program, pid = program.split('[')
-                    pid = pid[:-2]
-                else:
-                    pid = None
+    _shared = dict(
+        name = 'collector',
+        _enabled = True,
+        error = '',
+        processed = 0,
+        failures = 0,
+        success = 0,
+        start_time = time(),
+    )
 
-                new_msg = {
-                    "host": host,
-                    "msg": text,
-                    "program": program,
-                    "tags": [],
-                    "date": str(msg['date']),
-                    "level": "info",
-                    "pid": pid,
-                    'score': 0
-                }
+    def _target(self, conf, shared):
+        debug('started')
+        db = DB(host=conf.db_host)
+        while shared['_enabled']:
+            sleep(.05)
+            for msg in db.incoming.find({'processed': None}, tailable=True):
+                try:
+                    db.incoming.update(msg,  {'processed': 1}, safe=True, multi=False)
+                    shared['processed'] += 1
+                    li = msg['msg'].split()
+                    host = li[3]
+                    program = li[4]
+                    text = ' '.join(li[5:])
+                    if program.endswith(']:') and '[' in program:
+                        program, pid = program.split('[')
+                        pid = pid[:-2]
+                    else:
+                        pid = None
 
-                prog_rules =  db.rules.find({"program": program, "rule_type": "regexp"})
+                    new_msg = {
+                        "host": host,
+                        "msg": text,
+                        "program": program,
+                        "tags": [],
+                        "date": str(msg['date']),
+                        "level": "info",
+                        "pid": pid,
+                        'score': 0
+                    }
 
-                for rule in prog_rules:
-                    if re.search(rule['rule'], text):
-                        new_msg['score'] += rule['score']
+                    prog_rules =  db.rules.find({"program": program, "rule_type": "regexp"})
 
-                #TODO: try/except in case of duplicates
-                db.logs.insert(new_msg)
+                    for rule in prog_rules:
+                        if re.search(rule['rule'], text):
+                            new_msg['score'] += rule['score']
 
-                db.incoming.update(msg,{'$inc':{'processed': 1}}, safe=True, multi=False)
-#              #FIXME: count failures
-                if not stats['_enabled']:
-                    break
-            except Exception, e:
-                debug("Error while parsing %s: %s" % (repr(msg), e))
+                    #TODO: try/except in case of duplicates
+                    db.logs.insert(new_msg)
 
-    debug('exited')
+                    db.incoming.update(msg,{'$inc':{'processed': 1}}, safe=True, multi=False)
+    #              #FIXME: count failures
+                    if not shared['_enabled']:
+                        break
+                except Exception, e:
+                    debug("Error while parsing %s: %s" % (repr(msg), e))
 
-
-
-
-
-class Parser(object):
-
-    def __init__(self, conf):
-
-        manager = Manager()
-        self.stats = manager.dict(
-            processed = 0,
-            failures = 0,
-            success = 0,
-            error = '',
-            start_time = time(),
-            _enabled = True
-        )
-        self._p = Process(target=parser, args=(conf, self.stats))
-
-    def start(self):
-        self._p.start()
-
-    def stop(self):
-        timeout = 5
-        self.stats['_enabled'] = False
-        self._p.join(timeout)
-        if self._p.is_alive():
-            self._p.terminate()
-            debug("Parser did not exit after %d seconds - terminated" % timeout)
+        debug('exited')
 
 
 
@@ -126,16 +105,6 @@ if __name__ == '__main__':
 
 
 
-#TODO: move this in webapp
-#def stat_generator():
-#    """Generate statistics"""
-#    global stats
-#    print "Runtime: %d, processed logs: %d ps, successful: %d ps" % \
-#        (time() - stats['start_time'], stats['processed'], stats['success'])
-#    stats['processed'] = 0
-#    stats['success'] = 0
-#    Timer(1, stat_generator).start()
-#
 
 
 

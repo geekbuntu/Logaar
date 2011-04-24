@@ -4,13 +4,12 @@
     div#vertgraph {
         width: 378px;
         height: 220px;
+        margin: 10px;
         padding: 10px;
         position: relative;
         background: url("../static/images/chart-back.png") no-repeat;
     }
     div#vertgraph ul {
-        width: 378px;
-        height: 207px;
         margin: 0;
         list-style-type: none;
     }
@@ -18,7 +17,7 @@
         position: absolute;
         width: 4px;
         height: 160px;
-        bottom: 41px;
+        bottom: 61px;
         padding: 0 !important;
         margin: 0 !important;
         background: url("static/images/bar.png") repeat-x;
@@ -91,8 +90,9 @@
     <div id="ylabel" style="top: 27px;">{{traffic.ymax}}</div>
     <div id="ylabel" style="top: 172px;">{{traffic.ymin}}</div>
     <ul>
+        % delta = traffic.ymax - traffic.ymin
         % for dt, value in traffic.series:
-        <li style="left: {{dt*6}}px; height: {{value*1}}px;"><span>{{value}}</span></li>
+        <li style="left: {{dt*6 + 11}}px; height: {{int(value * 145 / delta)}}px;"><span>{{value}}</span></li>
         % end
     </ul>
 

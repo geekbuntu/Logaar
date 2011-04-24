@@ -41,7 +41,7 @@ input:hover { background: #fefefe}
 <style media="screen" type="text/css">
 
 /* root element for tabs  */
-ul.css-tabs {
+div#header ul.css-tabs {
     margin:0 !important;
     padding:0;
     height:30px;
@@ -100,6 +100,13 @@ ul.css-tabs a.current {
     font-size: 10px;
     font-family: verdana;
     text-align: right;
+    width: 200px;
+    float: right;
+    text-decoration: none;
+}
+div#pageLogin a {
+    text-decoration: none;
+    color: white;
 }
 
 html, body {
@@ -111,9 +118,10 @@ html, body {
 }
 
 #header {
-  height: 36px;
+  height: 56px;
   width: 100%;
-  background: #5ec2dd URL('static/header_inner.png') no-repeat;
+  background: #978568 url('static/images/header.png') no-repeat;
+  background-position:right;
   margin: 0 auto 0 auto;
 }
 
@@ -145,8 +153,10 @@ a.link, a, a.active {
   padding: .5em;
   font-size: 90%;
   text-align: center;
-  width: 818px;
-  margin: 0 auto 2px auto;
+  width: 100%;
+  position: absolute;
+  bottom: 0px;
+
 }
 
 .code {
@@ -775,27 +785,20 @@ div.box {
 </head>
 <body>
 
-    <div id="header"><div>Logaar</div></div>
-    <div id="pageLogin">
-    <span><a id="logout" href="/logout">Logout</a></span>
+    <div id="header">
+        <div>Logaar</div>
+        <div id="pageLogin">
+            <span><a id="logout" href="/logout">Logout</a></span>
+        </div>
+        <ul class="css-tabs">
+            <li><a href="incoming">Incoming</a></li>
+            <li><a href="logs">Logs</a></li>
+        <!-- <li><a href="hosts">Hosts</a></li>  -->
+            <li><a href="rules">Rules</a></li>
+            <li><a href="stats">Stats</a></li>
+            <li><a href="manage">Manage</a></li>
+        </ul>
     </div>
-    <div id="savereset">
-        <span>
-            <img src="static/save.png"  rel="#savediag" title="Save" id="saveimg">
-        </span>
-        <span>
-            <img src="static/reset.png" title="Reset" id="reset">
-        </span>
-    </div>
-
-    <ul class="css-tabs">
-        <li><a href="incoming">Incoming</a></li>
-        <li><a href="logs">Logs</a></li>
-    <!-- <li><a href="hosts">Hosts</a></li>  -->
-        <li><a href="rules">Rules</a></li>
-        <li><a href="stats">Stats</a></li>
-        <li><a href="manage">Manage</a></li>
-    </ul>
 
     <div class="tabpane"><div style="display:block"></div></div>
 

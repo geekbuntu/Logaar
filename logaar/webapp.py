@@ -31,6 +31,7 @@ from time import time, sleep, localtime
 
 from collector import Collector
 from confreader import ConfReader
+from monitor import stat_generator
 from parser import Parser
 #import mailer
 from core import Alert, Users, clean
@@ -51,8 +52,11 @@ log = logging.getLogger(__name__)
 
 
 db = None   # global db connection
-threads = {} # non-webapp threads
-
+processes = {} # non-webapp processes
+stats = dict(
+    collector_series = [], # collected logs per second list
+    parser_series = [],  # parsed logs per second list
+)
 
 def say(s, level=None):
         print s
@@ -391,8 +395,17 @@ class SparseDict(dict):
     def __missing__(self, key):
         return 0
 
+def timed(func):
+  def wrapper(*args, **kw):
+        t = time()
+        res = func(*args, **kw)
+        print '%s ran in %0.3f ms' % (func.func_name, (time() - t)*1000)
+        return res
+  return wrapper
+
 @bottle.route('/stats_top_talkers')
 @view('stats_top_talkers')
+@timed
 def top_talkers():
     """Generate a sorted list of most chatty hosts"""
     #FIXME: use hosts, not program
@@ -402,6 +415,7 @@ def top_talkers():
 
 @bottle.route('/stats_top_programs')
 @view('stats_top_programs')
+@timed
 def top_programs():
     """Generate a sorted list of most chatty programs"""
     s = db.logs.group({'program': 1},None, {'count': 0},'function(obj,out) { out.count++; }')
@@ -410,9 +424,10 @@ def top_programs():
 
 @bottle.route('/stats_traffic')
 @view('stats_traffic')
+@timed
 def stats_traffic():
 
-    s = db.logs.map_reduce(
+    s = db.logs.inline_map_reduce(
         """
         var created_at_minute =
             this.date.substring(0,15);
@@ -424,10 +439,9 @@ def stats_traffic():
                  for(var i = 0; i < values.length; i++) { total += values[i].count; }
                  return {key: key, count: total};
         }""",
-        "traffic_stat",
     )
 
-    traffic = tuple(i['value']['count'] for i in s.find())
+    traffic = tuple(i['value']['count'] for i in s)
     traffic = traffic[-60:]
 
     d = bdict(
@@ -442,23 +456,28 @@ def stats_traffic():
 
 @bottle.route('/stats')
 @view('stats')
-def stats():
+def statistics():
     return {}
+
+@bottle.route('/stats2')
+def statistics():
+    global stats
+    return repr(stats)
 
 @bottle.route('/manage')
 @view('manage')
 def manage():
-    global threads
+    global processes
     return dict(
-        collector = threads['collector'].stats,
-        parser = threads['parser'].stats
+        collector = processes['collector'].shared,
+        parser = processes['parser'].shared
     )
 
 @bottle.route('/shutdown')
 def shutdown():
-    global threads
-    log.info("Shutting down threads.")
-    for t in threads.itervalues():
+    global processes
+    log.info("Shutting down processes.")
+    for t in processes.itervalues():
         t.stop()
     log.info("Exiting.")
     exit(1)
@@ -503,12 +522,34 @@ def favicon():
 # end of web services
 
 
+# statistics thread
+from threading import Timer
+
+def stat_generator():
+    """Monitor processes, generate statistics"""
+    global stats
+    global processes
+
+    # access shared memory, fetch and reset counters
+    recv = processes['collector'].shared['received']
+    processes['collector'].shared['received'] = 0
+    stats['collector_series'].append(recv)
+    if len(stats['collector_series']) > 20:
+        stats['collector_series'].pop(0)
+#    print "Runtime: %d, processed logs: %d ps, successful: %d ps" % \
+#        (time() - stats['start_time'], stats['processed'], stats['success'])
+#    stats['processed'] = 0
+#    stats['success'] = 0
+    Timer(1, stat_generator).start()
+
+
+
 # main
 
 def main():
     global conf
     global db
-    global threads
+    global processes
 
     parser = ArgumentParser(description='Logaar daemon')
     parser.add_argument('-d', '--debug', action='store_true', help='debug mode')
@@ -539,14 +580,18 @@ def main():
     def debug(s):
         print 'webapp', getpid(), s
 
-    # Start non-webapp threads
+    # Start non-webapp processes
     debug("starting parser...")
-    threads['parser'] = Parser(conf)
-    threads['parser'].start()
+    processes['parser'] = Parser(conf)
+    processes['parser'].start()
 
     debug("starting collector...")
-    threads['collector'] = Collector(conf)
-    threads['collector'].start()
+    processes['collector'] = Collector(conf)
+    processes['collector'].start()
+
+    debug("starting monitor...")
+#    stat_generator()
+    Timer(1, stat_generator).start()
 
     # logging
 
@@ -582,10 +627,10 @@ def main():
 
     run(app=app, host=conf.listen_address, port=conf.listen_port, reloader=reload)
 
-    log.info("Shutting down threads.")
+    log.info("Shutting down processes.")
 
-    for t in threads.itervalues():
-        t.stop()
+    for name in ('parser', 'collector'):
+        processes[name].stop()
 
     log.info("Exiting.")
 
