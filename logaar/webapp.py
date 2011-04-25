@@ -26,6 +26,7 @@ from bottle import HTTPResponse, HTTPError
 from collections import defaultdict
 from datetime import datetime
 from pymongo import has_c, ASCENDING, DESCENDING #TODO: remove this
+from setproctitle import setproctitle
 from sys import exit
 from time import time, sleep, localtime
 
@@ -50,6 +51,7 @@ import logging
 logging.debug('starting')
 log = logging.getLogger(__name__)
 
+setproctitle('logaar_webapp')
 
 db = None   # global db connection
 processes = {} # non-webapp processes

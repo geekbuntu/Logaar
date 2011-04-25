@@ -20,6 +20,7 @@
 
 from datetime import datetime
 import socket
+from setproctitle import setproctitle
 from sys import exit
 from time import time, sleep
 
@@ -40,6 +41,7 @@ class Collector(ProcessWrapper):
     def _target(self, conf, shared):
         """Listen on UDP and TCP sockets, receive Syslog messages and store them
         in the "incoming" collection"""
+        setproctitle('logaar_collector')
         debug('started')
         try:
             db = DB(host=conf.db_host)

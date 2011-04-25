@@ -17,6 +17,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from datetime import datetime
+from setproctitle import setproctitle
 from sys import exit
 from time import time, sleep
 import re
@@ -28,7 +29,6 @@ from utils import debug, ProcessWrapper
 import logging
 logging.debug('starting')
 log = logging.getLogger(__name__)
-
 
 class Parser(ProcessWrapper):
     """Log parser process"""
@@ -44,6 +44,7 @@ class Parser(ProcessWrapper):
     )
 
     def _target(self, conf, shared):
+        setproctitle('logaar_parser')
         debug('started')
         db = DB(host=conf.db_host)
         while shared['_enabled']:
