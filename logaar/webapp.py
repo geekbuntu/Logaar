@@ -54,8 +54,8 @@ log = logging.getLogger(__name__)
 db = None   # global db connection
 processes = {} # non-webapp processes
 stats = dict(
-    collector_series = [], # collected logs per second list
-    parser_series = [],  # parsed logs per second list
+    collector_sequence = [], # collected logs per second list
+    parser_sequence = [],  # parsed logs per second list
 )
 
 def say(s, level=None):
@@ -114,8 +114,39 @@ def rg(name, default=None, caster=str):
         return caster(request.GET[name])
     return default
 
-# # #  web services  # # #
+def fetch_collection(collection, keys, search_key, filter_d=None):
+    """Fetch items from a collection, filtered using the
+    datatable parameters from a GET request
+    """
 
+    skip = rg('iDisplayStart', caster=int, default=10)
+    sort_on = rg('iSortCol_0', caster=int, default=0)
+    sort_on = keys[sort_on]
+    sort_dir = rg('sSortDir_0', default='desc')
+    free_search = rg('sSearch', default='')
+    limit = rg('iDisplayLength', caster=int, default=10)
+    sEcho = rg('sEcho', caster=int)
+    aaData, displayed,  total = db.search(
+        collection,
+        skip=skip,
+        sort_on=sort_on,
+        sort_dir=sort_dir,
+        free_search=free_search,
+        limit=limit,
+        keys=keys,
+        search_key=search_key,
+        filter_d=filter_d,
+    )
+    d = {
+        'iTotalRecords': total,
+        'iTotalDisplayRecords': displayed,
+        'sEcho': sEcho,
+        'aaData': aaData
+    }
+    return d
+
+
+# # #  web services  # # #
 
 # #  authentication  # #
 
@@ -194,50 +225,10 @@ def index():
 #   - edit: updates an element if rid is not null, otherwise creates
 #             a new one
 
-
-@bottle.route('/logs')
-@view('logs')
-def logs():
-    _require()
-    keys = ('date', 'level', 'program', 'pid', 'message', 'score', 'tags')
-    return dict(keys=keys, callback='dlogs')
-
-@bottle.get('/dlogs')
-def dlogs():
-    """Serve dynamic logs table"""
-    logs_cols = ('date', 'level', 'program', 'pid', 'msg', 'score', 'tags')
-
-    skip = rg('iDisplayStart', caster=int, default=10)
-    sort_on = rg('iSortCol_0', caster=int, default=0)
-    sort_on = logs_cols[sort_on]
-    sort_dir = rg('sSortDir_0', default='desc')
-    free_search = rg('sSearch', default='a')
-    limit = rg('iDisplayLength', caster=int, default=10)
-    sEcho = rg('sEcho', caster=int)
-
-    aaData, displayed,  total = db.search(
-        db.logs,
-        skip=skip,
-        sort_on=sort_on,
-        sort_dir=sort_dir,
-        free_search=free_search,
-        limit=limit,
-        keys=logs_cols,
-        search_key='msg',
-    )
-
-    d = {
-        'iTotalRecords': total,
-        'iTotalDisplayRecords': displayed,
-        'sEcho': sEcho,
-        'aaData': aaData
-    }
-    return json.dumps(d, default=json_util.default)
-
-
 @bottle.route('/incoming')
 @view('logs')
 def incoming():
+    """Serve incoming tab"""
     _require()
     keys = ('date', 'message')
     return dict(keys=keys, callback='dincoming')
@@ -246,32 +237,26 @@ def incoming():
 def dincoming():
     """Serve dynamic logs table"""
     keys = ('date', 'msg')
-    coll = db.incoming
-
-    skip = rg('iDisplayStart', caster=int, default=10)
-    sort_on = rg('iSortCol_0', caster=int, default=0)
-    sort_on = keys[sort_on]
-    sort_dir = rg('sSortDir_0', default='desc')
-    sort_dir = DESCENDING if sort_dir == 'desc' else ASCENDING
-    free_search = rg('sSearch', default='a')
-    lim = rg('iDisplayLength', caster=int, default=10)
-    sEcho = rg('sEcho', caster=int)
-
-    if free_search:
-        regexp = re.compile(free_search, re.IGNORECASE)
-        ru = coll.find({'rule': regexp, 'processed': None}, limit=lim, skip=skip).sort(sort_on, sort_dir)
-    else:
-        ru = coll.find({'processed': None}, limit=lim, skip=skip).sort(sort_on, sort_dir)
-
-    aaData =  [[str(r.get(k, '')) for k in keys] for r in ru]
-    print repr(aaData)
-    d = {
-        'iTotalRecords': coll.count(),
-        'iTotalDisplayRecords': ru.count(),
-        'sEcho': sEcho,
-        'aaData': aaData
-    }
+    d = fetch_collection(db.incoming, keys, 'msg', filter_d={'processed':None})
     return json.dumps(d, default=json_util.default)
+
+
+@bottle.route('/logs')
+@view('logs')
+def logs():
+    """Serve logs tab"""
+    _require()
+    keys = ('date', 'level', 'program', 'pid', 'message', 'score', 'tags')
+    return dict(keys=keys, callback='dlogs')
+
+@bottle.get('/dlogs')
+def dlogs():
+    """Serve dynamic logs table"""
+    keys = ('date', 'level', 'program', 'pid', 'msg', 'score', 'tags')
+    d = fetch_collection(db.logs, keys, 'msg')
+    return json.dumps(d, default=json_util.default)
+
+
 
 
 @bottle.route('/rules')
@@ -295,35 +280,6 @@ def rules():
     )
     return dict(rules=rules, keys=keys)
 
-#Type   Name    Info
-#int    iDisplayStart   Display start point
-#int    iDisplayLength  Number of records to display
-#int    iColumns    Number of columns being displayed (useful for getting individual column search info)
-#string sSearch Global search field
-#boolean    bEscapeRegex    Global search is regex or not
-#boolean    bSortable_(int) Indicator for if a column is flagged as sortable or not on the client-side
-#boolean    bSearchable_(int)   Indicator for if a column is flagged as searchable or not on the client-side
-#string sSearch_(int)   Individual column filter
-#boolean    bEscapeRegex_(int)  Individual column filter is regex or not
-#int    iSortingCols    Number of columns to sort on
-#int    iSortCol_(int)  Column being sorted on (you will need to decode this number for your database)
-#string sSortDir_(int)  Direction to be sorted - "desc" or "asc". Note that the prefix for this variable is wrong in 1.5.x where iSortDir_(int) was used)
-#string sEcho   Information for DataTables to use for rendering
-
-
-
-
-
-
-#from json import JSONEncoder
-#from pymongo.objectid import ObjectId
-#
-#class MongoEncoder(JSONEncoder):
-#    def _iterencode(self, o, markers=None):
-#        if isinstance(o, ObjectId):
-#            return """ObjectId("%s")""" % str(o)
-#        else:
-#            return JSONEncoder._iterencode(self, o, markers)
 
 rules_cols =  (
     'id',
@@ -342,7 +298,7 @@ rules_cols =  (
 
 @bottle.get('/drules')
 def drules():
-
+    """Serve dynamic rules table"""
     skip = rg('iDisplayStart', caster=int, default=10)
     sort_on = rg('iSortCol_0', caster=int, default=0)
     sort_on = rules_cols[sort_on]
@@ -453,6 +409,36 @@ def stats_traffic():
    )
     return {'traffic': d}
 
+@bottle.route('/collector_chart')
+@view('small_chart')
+def collector_chart():
+    global stats
+    s = stats['collector_sequence']
+    d = bdict(
+        title='Collector',
+        sequence=enumerate(s),
+        ymin=min(s),
+        ymax=max(s),
+        xmin=0,
+        xmax=3,
+   )
+    return {'chart': d}
+
+@bottle.route('/parser_chart')
+@view('small_chart')
+def parser_chart():
+    global stats
+    s = stats['parser_sequence']
+    d = bdict(
+        title='Parser',
+        sequence=enumerate(s),
+        ymin=min(s),
+        ymax=max(s),
+        xmin=0,
+        xmax=3,
+   )
+    return {'chart': d}
+
 
 @bottle.route('/stats')
 @view('stats')
@@ -533,9 +519,9 @@ def stat_generator():
     # access shared memory, fetch and reset counters
     recv = processes['collector'].shared['received']
     processes['collector'].shared['received'] = 0
-    stats['collector_series'].append(recv)
-    if len(stats['collector_series']) > 20:
-        stats['collector_series'].pop(0)
+    stats['collector_sequence'].append(recv)
+    if len(stats['collector_sequence']) > 40:
+        stats['collector_sequence'].pop(0)
 #    print "Runtime: %d, processed logs: %d ps, successful: %d ps" % \
 #        (time() - stats['start_time'], stats['processed'], stats['success'])
 #    stats['processed'] = 0

@@ -74,18 +74,19 @@ class DB(object):
     #TODO: run c.disconnect() on DB.__del__() ?
 
 
-    def search(self, coll, skip=0, sort_on=None, sort_dir='desc', free_search=None, limit=10, keys=None, search_key='rule'):
+    def search(self, coll, skip=0, sort_on=None, sort_dir='desc', free_search=None, limit=10, keys=None, search_key='rule', filter_d=None):
         """Search, sort and filter items"""
+        if filter_d is None:
+            filter_d = {}
 
         sort_dir = DESCENDING if sort_dir == 'desc' else ASCENDING
 
         #TODO: rexep caching
         if free_search:
             regexp = re.compile(free_search, re.IGNORECASE)
-            ru = coll.find({search_key: regexp }, limit=limit, skip=skip).sort(sort_on, sort_dir)
-        else:
-            ru = coll.find(limit=limit, skip=skip).sort(sort_on, sort_dir)
+            filter_d[search_key] = regexp
 
+        ru = coll.find(filter_d, limit=limit, skip=skip).sort(sort_on, sort_dir)
         if keys:
             # return a list of values related to "keys"
             return (
@@ -95,14 +96,6 @@ class DB(object):
             )
         else:
             return (ru, ru.count(), coll.count())
-
-#    d = {
-#        'iTotalRecords': coll.count(),
-#        'iTotalDisplayRecords': ru.count(),
-#        'sEcho': sEcho,
-#        'aaData': [[r.get(k) for k in keys] for r in ru]
-#    }
-#    return json.dumps(d, default=json_util.default)
 
 
     def stats(self, coll):
