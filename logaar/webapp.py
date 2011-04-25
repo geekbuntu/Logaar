@@ -22,9 +22,9 @@ import bottle
 from bottle import abort, route, static_file, run, view, request
 from bottle import debug as bottle_debug
 from bottle import HTTPResponse, HTTPError
-
 from collections import defaultdict
 from datetime import datetime
+import logging
 from pymongo import has_c, ASCENDING, DESCENDING #TODO: remove this
 from setproctitle import setproctitle
 from sys import exit
@@ -46,13 +46,10 @@ import re
 
 from argparse import ArgumentParser
 
+# setup global logging
+log = logging.getLogger('webapp')
 
-import logging
-logging.debug('starting')
-log = logging.getLogger(__name__)
-
-setproctitle('logaar_webapp')
-
+# globals
 db = None   # global db connection
 processes = {} # non-webapp processes
 stats = dict(
@@ -61,7 +58,7 @@ stats = dict(
 )
 
 def say(s, level=None):
-        print s
+    print s
 
 def ack(s=None):
     """Acknowledge successful processing and returns ajax confirmation."""
@@ -511,7 +508,7 @@ def favicon():
 
 
 # statistics thread
-from threading import Timer
+from threading import Thread
 
 def stat_generator():
     """Monitor processes, generate statistics"""
@@ -528,7 +525,30 @@ def stat_generator():
 #        (time() - stats['start_time'], stats['processed'], stats['success'])
 #    stats['processed'] = 0
 #    stats['success'] = 0
-    Timer(1, stat_generator).start()
+#    Timer(1, stat_generator).start()
+
+class Monitor(Thread):
+    """Monitor processes, generate statistics"""
+    def run(self):
+        global stats
+        global processes
+        log = logging.getLogger('monitor')
+        log.info('started')
+        self._enabled = True
+        while self._enabled:
+            # access shared memory, fetch and reset counters
+            recv = processes['collector'].shared['received']
+            processes['collector'].shared['received'] = 0
+            stats['collector_sequence'].append(recv)
+            if len(stats['collector_sequence']) > 40:
+                stats['collector_sequence'].pop(0)
+            sleep(1)
+        log.info('exited')
+
+    def stop(self):
+        log.debug('exiting...')
+        self._enabled = False
+        self.join(2)
 
 
 
@@ -539,6 +559,9 @@ def main():
     global db
     global processes
 
+    setproctitle('logaar_webapp')
+
+    # Parse args
     parser = ArgumentParser(description='Logaar daemon')
     parser.add_argument('-d', '--debug', action='store_true', help='debug mode')
     parser.add_argument('-c', '--cf',  nargs='?',
@@ -547,62 +570,59 @@ def main():
         help='repository directory')
     args = parser.parse_args()
 
+    # Load conf
     try:
         conf = ConfReader(fn=args.cf)
     except Exception, e:
-        log.error("Exception %s while reading configuration file '%s'" % (e, args.cf))
+        print("Exception %s while reading configuration file '%s'" % (e, args.cf))
         exit(1)
-
-    if args.repodir:
-        conf.data_dir = args.repodir
 
     # Setting up DB connectivity
     try:
-        db = DB()
+        db = DB() #TODO DB(host=...)
     except Exception, e:
-        log.error("Unable to setup connection to the database: %s" % e)
+        print("Unable to setup connection to the database: %s" % e)
         exit(1)
-    #TODO DB(host=...)
 
-    from os import getpid
-    def debug(s):
-        print 'webapp', getpid(), s
-
-    # Start non-webapp processes
-    debug("starting parser...")
-    processes['parser'] = Parser(conf)
-    processes['parser'].start()
-
-    debug("starting collector...")
-    processes['collector'] = Collector(conf)
-    processes['collector'].start()
-
-    debug("starting monitor...")
-#    stat_generator()
-    Timer(1, stat_generator).start()
-
-    # logging
-
+    # Setting up logging and debug mode
     if args.debug:
-        debug_mode = True
-#        log.basicConfig(level=log.DEBUG,
-#                        format='%(asctime)s %(levelname)-8s %(message)s',
-#                        datefmt='%a, %d %b %Y %H:%M:%S')
-        log.debug("Debug mode")
+        logging.basicConfig(
+            level=logging.DEBUG,
+#            format='%(asctime)s [%(process)d] %(levelname)s %(name)s %(message)s',
+            format='%(asctime)s [%(process)d] %(levelname)s %(name)s (%(funcName)s) %(message)s',
+            datefmt = '%Y-%m-%d %H:%M:%S' # %z for timezone
+        )
         log.debug("Configuration file: '%s'" % args.cf)
-        bottle.debug(True)
-        say("Logaar started in debug mode.", level="success")
+        log.info("Logaar started in debug mode.")
         bottle_debug(True)
         reload = True
     else:
-        debug_mode = False
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format='%(asctime)s [%(process)d] %(levelname)s %(name)s %(message)s',
+            datefmt = '%Y-%m-%d %H:%M:%S' # %z for timezone
+        )
+        log.debug("Configuration file: '%s'" % args.cf)
+        log.info("started")
 #        log.basicConfig(level=log.INFO,
 #                    format='%(asctime)s %(levelname)-8s %(message)s',
 #                    datefmt='%a, %d %b %Y %H:%M:%S',
 #                    filename=conf.logfile,
 #                    filemode='w')
         reload = False
-        say("Logaar started.", level="success")
+
+    # Start non-webapp processes
+    log.info("starting parser...")
+    processes['parser'] = Parser(conf)
+    processes['parser'].start()
+
+    log.info("starting collector...")
+    processes['collector'] = Collector(conf)
+    processes['collector'].start()
+
+    log.info("starting monitor...")
+    processes['monitor'] = Monitor()
+    processes['monitor'].start()
 
     globals()['users'] = Users(d=conf.data_dir)
 
@@ -617,15 +637,16 @@ def main():
 
     log.info("Shutting down processes.")
 
-    for name in ('parser', 'collector'):
+    for name in ('parser', 'collector', 'monitor'):
         processes[name].stop()
 
-    log.info("Exiting.")
-
+    db.disconnect()
+    log.info("exiting...")
+    exit(0)
 
 
 
 
 if __name__ == "__main__":
-        main()
+    main()
 

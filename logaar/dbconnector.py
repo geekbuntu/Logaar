@@ -13,11 +13,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from logging import getLogger
 from pymongo import Connection, has_c, ASCENDING, DESCENDING
 import re
 
-log = getLogger(__name__)
+from logging import getLogger
+log = getLogger('dbconnector')
 
 class DB(object):
     def __init__(self, host='localhost'):
@@ -27,6 +27,7 @@ class DB(object):
             log.warning("Pymongo C module not available. Consider installing it to increase performances.")
 
         c = Connection()
+        self._connection = c
 
         if 'logaar' not in c.database_names():
             log.info("Creating logaar database")
@@ -70,9 +71,12 @@ class DB(object):
                 d = dict(zip(setup_rules.keys, rulevals))
                 db.rules.insert(d)
         self.rules = db.rules
+        log.info('connected')
 
     #TODO: run c.disconnect() on DB.__del__() ?
 
+    def disconnect(self):
+        self._connection.disconnect()
 
     def search(self, coll, skip=0, sort_on=None, sort_dir='desc', free_search=None, limit=10, keys=None, search_key='rule', filter_d=None):
         """Search, sort and filter items"""

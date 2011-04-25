@@ -17,6 +17,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from datetime import datetime
+from logging import getLogger
 from setproctitle import setproctitle
 from sys import exit
 from time import time, sleep
@@ -24,11 +25,7 @@ import re
 
 #from core import Alert, Users, clean
 from dbconnector import DB
-from utils import debug, ProcessWrapper
-
-import logging
-logging.debug('starting')
-log = logging.getLogger(__name__)
+from utils import ProcessWrapper
 
 class Parser(ProcessWrapper):
     """Log parser process"""
@@ -45,10 +42,11 @@ class Parser(ProcessWrapper):
 
     def _target(self, conf, shared):
         setproctitle('logaar_parser')
-        debug('started')
+        log = getLogger('parser')
+        log.info('started')
         db = DB(host=conf.db_host)
         while shared['_enabled']:
-            sleep(.05)
+            sleep(.1)
             for msg in db.incoming.find({'processed': None}, tailable=True):
                 try:
                     db.incoming.update(msg,  {'processed': 1}, safe=True, multi=False)
@@ -84,25 +82,17 @@ class Parser(ProcessWrapper):
                     db.logs.insert(new_msg)
 
                     db.incoming.update(msg,{'$inc':{'processed': 1}}, safe=True, multi=False)
+                    shared['success'] += 1
+                    log.debug('1 log parsed')
     #              #FIXME: count failures
                     if not shared['_enabled']:
                         break
                 except Exception, e:
-                    debug("Error while parsing %s: %s" % (repr(msg), e))
+                    log.warn("Error while parsing %s: %s" % (repr(msg), e))
 
-        debug('exited')
+        db.disconnect()
+        log.info('exited')
 
-
-
-
-# The parser can be run autonomously
-if __name__ == '__main__':
-    from confreader import ConfReader
-    conf = ConfReader(fn='logaar.ini')
-    p = Parser(conf)
-    p.start()
-    sleep(1)
-    p.stop()
 
 
 
