@@ -104,25 +104,59 @@
         height: 32px;
     }
 
+    /* Horizontal container to align the charts */
+
+    div.hcontainer {
+        overflow:hidden;
+        width:1400px;
+    }
+    div.hcontainer div.inner {
+        overflow:hidden;
+        width: 1400px;
+    }
+    div.hcontainer div.inner div.chartbox {
+        float:left;
+        width:400px;
+        height:250px;
+        margin:1em;
+    }
+
 </style>
 
-<div id="stats_traffic">
-    <div class="spinner"></div>
-</div>
-<div id="stats_top_talkers">
-    <div class="spinner"></div>
-</div>
-<div id="stats_top_programs">
-    <div class="spinner"></div>
+<div class="hcontainer">
+    <div class="inner">
+        <div id="stats_traffic" class="chartbox">
+            <div class="spinner"></div>
+        </div>
+        <div id="stats_collector_chart" class="chartbox">
+            <div class="spinner"></div>
+        </div>
+        <div id="stats_parser_chart" class="chartbox">
+            <div class="spinner"></div>
+        </div>
+    </div>
 </div>
 
+<div class="hcontainer">
+    <div class="inner">
+        <div id="stats_top_talkers" class="chartbox">
+            <div class="spinner"></div>
+        </div>
+        <div id="stats_top_programs" class="chartbox">
+            <div class="spinner"></div>
+        </div>
+    </div>
+</div>
 
 
 <script type="text/javascript">
 $(function() {
-    $('div#stats_traffic').load('stats_traffic');
-    $('div#stats_top_programs').load('stats_top_programs');
-    $('div#stats_top_talkers').load('stats_top_talkers');
-
+    window.setInterval(function() {
+        $('div#stats_traffic').load('stats_traffic');
+        $('div#stats_collector_chart').load('collector_chart');
+        $('div#stats_parser_chart').load('parser_chart');
+        $('div#stats_top_programs').load('stats_top_programs');
+        $('div#stats_top_talkers').load('stats_top_talkers');
+    }, 10000);
 });
 </script>

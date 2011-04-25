@@ -54,8 +54,8 @@ log = logging.getLogger(__name__)
 db = None   # global db connection
 processes = {} # non-webapp processes
 stats = dict(
-    collector_sequence = [], # collected logs per second list
-    parser_sequence = [],  # parsed logs per second list
+    collector_sequence = [0], # collected logs per second list
+    parser_sequence = [0],  # parsed logs per second list
 )
 
 def say(s, level=None):
