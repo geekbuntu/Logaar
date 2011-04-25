@@ -73,7 +73,6 @@ class Collector(ProcessWrapper):
                 }
                 db.incoming.insert(msg)
                 shared['inserted'] += 1
-                log.debug('1 log inserted')
             except socket.timeout:
                 pass
             except socket.error, e:

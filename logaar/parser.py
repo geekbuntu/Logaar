@@ -83,7 +83,6 @@ class Parser(ProcessWrapper):
 
                     db.incoming.update(msg,{'$inc':{'processed': 1}}, safe=True, multi=False)
                     shared['success'] += 1
-                    log.debug('1 log parsed')
     #              #FIXME: count failures
                     if not shared['_enabled']:
                         break
