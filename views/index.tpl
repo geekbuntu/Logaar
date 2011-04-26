@@ -2,6 +2,7 @@
 <html>
 <head>
 <meta content="text/html; charset=utf-8" http-equiv="content-type">
+<link rel="shortcut icon" href="/static/images/favicon.ico" />
 %if not logged_in:
 <div>
     <h2>Login</h2>
