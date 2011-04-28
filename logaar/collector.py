@@ -32,11 +32,10 @@ class Collector(ProcessWrapper):
     """Log collector process"""
 
     _shared = dict(
-        name = 'collector',
-        _enabled = True,
+        _enabled = 0,
         received = 0,
         inserted = 0,
-        error = '',
+        error = 0,
     )
 
     def _target(self, conf, shared):
@@ -58,12 +57,12 @@ class Collector(ProcessWrapper):
             log.info('exited')
             exit(1)
 
-        while shared['_enabled']:
+        while shared['_enabled'].value:
             try:
                 data,addr = sock.recvfrom(1024)
                 if not data:
                     break
-                shared['received'] += 1
+                shared['received'].value += 1
                 msg = {
                     "host": "localhost",
                     "msg": data,
@@ -72,7 +71,7 @@ class Collector(ProcessWrapper):
                     "level": "info",
                 }
                 db.incoming.insert(msg)
-                shared['inserted'] += 1
+                shared['inserted'].value += 1
             except socket.timeout:
                 pass
             except socket.error, e:

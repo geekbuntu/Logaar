@@ -31,13 +31,12 @@ class Parser(ProcessWrapper):
     """Log parser process"""
 
     _shared = dict(
-        name = 'collector',
-        _enabled = True,
-        error = '',
+        _enabled = 0,
+        error = 0,
         processed = 0,
         failures = 0,
         success = 0,
-        start_time = time(),
+        start_time = int(time()),
     )
 
     def _target(self, conf, shared):
@@ -45,12 +44,12 @@ class Parser(ProcessWrapper):
         log = getLogger('parser')
         log.info('started')
         db = DB(host=conf.db_host)
-        while shared['_enabled']:
+        while shared['_enabled'].value:
             sleep(.1)
             for msg in db.incoming.find({'processed': None}, tailable=True):
                 try:
                     db.incoming.update(msg,  {'processed': 1}, safe=True, multi=False)
-                    shared['processed'] += 1
+                    shared['processed'].value += 1
                     li = msg['msg'].split()
                     host = li[3]
                     program = li[4]
@@ -82,9 +81,9 @@ class Parser(ProcessWrapper):
                     db.logs.insert(new_msg)
 
                     db.incoming.update(msg,{'$inc':{'processed': 1}}, safe=True, multi=False)
-                    shared['success'] += 1
+                    shared['success'].value += 1
     #              #FIXME: count failures
-                    if not shared['_enabled']:
+                    if not shared['_enabled'].value:
                         break
                 except Exception, e:
                     log.warn("Error while parsing %s: %s" % (repr(msg), e))

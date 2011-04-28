@@ -16,12 +16,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from multiprocessing import Process, Manager
+from multiprocessing import Process, Value
 from os import getpid
-
-def debug(s):
-    #FIXME: __name__ won't work
-    print __name__, getpid(), s
 
 class ProcessWrapper(object):
     """Wrapper class to start/stop processes.
@@ -34,24 +30,31 @@ class ProcessWrapper(object):
         """
         assert hasattr(self, '_shared'), "An attribute named '_shared', type dict is required."
         assert isinstance(self._shared, dict), "The attribute '_shared' must be a dict."
-        manager = Manager()
-        self.shared = manager.dict(self._shared.items() + shared.items())
+        self.shared = {}
+        for name, val in self._shared.iteritems():
+            self.shared[name] = Value('i', val)
+#        shared = Value('i', val) for name, val in self._shared]
+#        self.shared = shared
         self._p = Process(target=self._target, args=(conf, self.shared))
 
     def start(self):
         """Start the process"""
+        self.shared['_enabled'].value = 1
         self._p.start()
 
     def stop(self):
         """Stop the process, either gracefully or by terminating it
         """
         timeout = 5
-        self.shared['_enabled'] = False
+        self.shared['_enabled'].value = 0
         self._p.join(timeout)
         if self._p.is_alive():
             self._p.terminate()
-            debug("%s did not exit after %d seconds - terminated" % (self.shared['name'], timeout))
-#            debug("%s did not exit after %d seconds - terminated" % (self.__class__.__name, timeout))
+            #TODO: add logging here
+
+#    def _shared(self):
+#        """Return a tuple of shared integers, to be redefined"""
+#        raise NotImplementedError
 
     def _target(self):
         """Process code, to be redefined"""
