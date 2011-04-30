@@ -2,5 +2,6 @@
 while true
 do
 	./logaar/webapp.py -d
-	sleep .5
+	echo '-----------'
+	sleep 1
 done

@@ -27,6 +27,7 @@ from datetime import datetime
 import logging
 from pymongo import has_c, ASCENDING, DESCENDING #TODO: remove this
 from setproctitle import setproctitle
+import signal
 from sys import exit
 from time import time, sleep, localtime
 
@@ -251,6 +252,7 @@ def logs():
 @bottle.get('/dlogs')
 def dlogs():
     """Serve dynamic logs table"""
+    #TODO: ' '.join(tags)
     keys = ('date', 'level', 'program', 'pid', 'msg', 'score', 'tags')
     d = fetch_collection(db.logs, keys, 'msg')
     return json.dumps(d, default=json_util.default)
@@ -551,6 +553,18 @@ class Monitor(Thread):
         self.join(2)
 
 
+def shutdown(*args):
+    """Shutdown threads and processes"""
+    log.info("Shutting down processes.")
+
+    for name in ('parser', 'collector', 'monitor'):
+        processes[name].stop()
+
+    db.disconnect()
+    log.info("exiting...")
+    exit(0)
+
+
 # main
 
 def main():
@@ -559,6 +573,9 @@ def main():
     global processes
 
     setproctitle('logaar_webapp')
+    signal.signal(signal.SIGHUP, shutdown)
+    signal.signal(signal.SIGINT, shutdown)
+#    signal.signal(signal.SIGSTOP, shutdown)
 
     # Parse args
     parser = ArgumentParser(description='Logaar daemon')
@@ -633,15 +650,8 @@ def main():
     app = SessionMiddleware(app, session_opts)
 
     run(app=app, host=conf.listen_address, port=conf.listen_port, reloader=reload)
+    shutdown()
 
-    log.info("Shutting down processes.")
-
-    for name in ('parser', 'collector', 'monitor'):
-        processes[name].stop()
-
-    db.disconnect()
-    log.info("exiting...")
-    exit(0)
 
 
 
